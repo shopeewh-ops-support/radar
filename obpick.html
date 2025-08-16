@@ -116,10 +116,11 @@
             text-anchor: middle;
         }
         
+        /* ĐÃ THÊM: CSS cho nhãn phần trăm pathway */
         .pathway-percentage {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
-            fill: #007bff;
+            fill: #dc3545;
             text-anchor: middle;
         }
 
@@ -171,10 +172,10 @@
 </head>
 <body>
     <nav id="main-nav">
-        <a href="index.html">Overview</a>
-        <a href="obpick.html" class="active">Outbound Pick</a>
-        <a href="put.html">Putaway</a>
-        <a href="inv.html">Inventory Accuracy</a>
+        <a href="#">Overview</a>
+        <a href="#" class="active">Outbound Pick</a>
+        <a href="#">Putaway</a>
+        <a href="#">Inventory Accuracy</a>
     </nav>
 
     <h1>Picker Route Log</h1>
@@ -212,16 +213,22 @@
         const NUM_DOUBLE_SHELVES = 8;
         const NUM_SINGLE_SHELVES = NUM_DOUBLE_SHELVES * 2;
         const NUM_AISLES = NUM_DOUBLE_SHELVES - 1;
-        const PADDING_TOP = 40;
-        const PADDING_BOTTOM = 40; // Thêm padding dưới cho percentage
-        const MAP_HEIGHT = 800 + PADDING_BOTTOM;
+
+        // ĐÃ CẬP NHẬT: Tăng không gian phía trên cho nhãn %
+        const TOP_LABEL_AREA_HEIGHT = 50; 
+        const SHELF_AREA_HEIGHT = 750;
+        const BOTTOM_PADDING = 20;
+
+        const PADDING_TOP = TOP_LABEL_AREA_HEIGHT;
+        const SHELF_LENGTH = SHELF_AREA_HEIGHT;
+        const MAP_HEIGHT = TOP_LABEL_AREA_HEIGHT + SHELF_AREA_HEIGHT + BOTTOM_PADDING;
+
         const SHELF_DEPTH = 50;
         const AISLE_WIDTH = 80;
         const NUM_SEGMENTS = 24;
         const totalLayoutWidth = (NUM_SINGLE_SHELVES * SHELF_DEPTH) + (NUM_AISLES * AISLE_WIDTH);
         const MAP_WIDTH = totalLayoutWidth + 60;
         const START_X = (MAP_WIDTH - totalLayoutWidth) / 2;
-        const SHELF_LENGTH = MAP_HEIGHT - PADDING_BOTTOM - PADDING_TOP;
         const SEGMENT_HEIGHT = SHELF_LENGTH / NUM_SEGMENTS;
 
         const svg = d3.select("#warehouse-map").attr("width", MAP_WIDTH).attr("height", MAP_HEIGHT);
@@ -254,7 +261,8 @@
             const groupStartX = START_X + startDoubleShelfIndex * (2 * SHELF_DEPTH + AISLE_WIDTH) + (isLeftShelf ? 0 : SHELF_DEPTH);
             const groupWidth = (p.shelves === 1) ? SHELF_DEPTH : (2 * SHELF_DEPTH + AISLE_WIDTH);
             const midpointX = groupStartX + groupWidth / 2;
-            pathwayLabels.push({ name: p.name, x: midpointX, y: PADDING_TOP - 15 });
+            // ĐÃ CẬP NHẬT: Điều chỉnh vị trí Y của tên pathway để nhường chỗ cho %
+            pathwayLabels.push({ name: p.name, x: midpointX, y: 40 }); 
         });
         for (let j = 1; j < NUM_SEGMENTS; j++) { dividers.push({ x1: START_X, y1: PADDING_TOP + j * SEGMENT_HEIGHT, x2: START_X + totalLayoutWidth, y2: PADDING_TOP + j * SEGMENT_HEIGHT }); }
         svg.selectAll(".shelf").data(shelves).enter().append("rect").attr("class", d => `shelf shelf-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height);
@@ -294,14 +302,14 @@
         fetchDataForDate(datePicker.value);
 
         function updateVisualization(fullPickData) {
-            const totalPicks = fullPickData.length;
             const pickCounts = fullPickData.reduce((acc, pick) => {
                 if (pick.location) { acc[pick.location] = (acc[pick.location] || 0) + 1; }
                 return acc;
             }, {});
             
             drawHiddenPickDots(pickCounts);
-            updatePathwayPercentages(fullPickData, totalPicks);
+            // ĐÃ THÊM: Lời gọi hàm cập nhật phần trăm pathway
+            updatePathwayPercentages(pickCounts);
             runScanAnimation(); 
             bindEventListeners(pickCounts, fullPickData);
         }
@@ -321,35 +329,39 @@
             });
         }
         
-        function updatePathwayPercentages(fullPickData, totalPicks) {
+        // ĐÃ THÊM: Hàm tính toán và hiển thị phần trăm cho mỗi pathway
+        function updatePathwayPercentages(pickCounts) {
             svg.selectAll(".pathway-percentage").remove();
-            
-            const pathwayStats = {};
-            pathwayLabelData.forEach(p => {
-                pathwayStats[p.name] = { count: 0, x: p.x, y: MAP_HEIGHT - PADDING_BOTTOM + 20 };
-            });
 
-            fullPickData.forEach(pick => {
-                if (pick.location) {
-                    const parts = pick.location.split('-');
-                    if (parts.length === 4) {
-                        const pathwayName = `${parts[1]}-${parts[2]}`;
-                        if (pathwayStats[pathwayName]) {
-                            pathwayStats[pathwayName].count++;
-                        }
-                    }
+            const totalPicks = Object.values(pickCounts).reduce((sum, count) => sum + count, 0);
+            if (totalPicks === 0) return;
+
+            const pathwayPickCounts = {};
+            for (const location in pickCounts) {
+                const parts = location.split('-');
+                if (parts.length >= 3) {
+                    const pathwayName = `${parts[1]}-${parts[2]}`;
+                    pathwayPickCounts[pathwayName] = (pathwayPickCounts[pathwayName] || 0) + pickCounts[location];
                 }
-            });
-            
-            const percentageData = Object.values(pathwayStats).map(stat => {
-                const percentage = totalPicks > 0 ? ((stat.count / totalPicks) * 100).toFixed(1) : "0.0";
-                return { ...stat, percentageText: `${percentage}%` };
+            }
+
+            const percentageData = pathwayLabels.map(label => {
+                const count = pathwayPickCounts[label.name] || 0;
+                const percentage = (count / totalPicks) * 100;
+                return {
+                    ...label,
+                    percentage: percentage.toFixed(1) + '%'
+                };
             });
 
-            svg.selectAll(".pathway-percentage").data(percentageData).enter().append("text")
+            svg.selectAll(".pathway-percentage")
+               .data(percentageData)
+               .enter()
+               .append("text")
                .attr("class", "pathway-percentage")
-               .attr("x", d => d.x).attr("y", d => d.y)
-               .text(d => d.percentageText);
+               .attr("x", d => d.x)
+               .attr("y", 20) // Vị trí Y cố định phía trên tên pathway
+               .text(d => d.percentage);
         }
 
         function runScanAnimation() {
