@@ -355,13 +355,13 @@
             });
 
             svg.selectAll(".pathway-percentage")
-               .data(percentageData)
-               .enter()
-               .append("text")
-               .attr("class", "pathway-percentage")
-               .attr("x", d => d.x)
-               .attr("y", 20) // Vị trí Y cố định phía trên tên pathway
-               .text(d => d.percentage);
+                .data(percentageData)
+                .enter()
+                .append("text")
+                .attr("class", "pathway-percentage")
+                .attr("x", d => d.x)
+                .attr("y", 20) // Vị trí Y cố định phía trên tên pathway
+                .text(d => d.percentage);
         }
 
         function runScanAnimation() {
@@ -406,6 +406,8 @@
                             row.innerHTML = `<td>${pick.location || 'N/A'}</td><td>${pick.operator || 'N/A'}</td><td>${pick.quantity || 'N/A'}</td><td>${pick.sku_id || 'N/A'}</td>`;
                         });
                         container.style.display = "block";
+                        // *** ĐÃ THÊM: Tự động cuộn đến bảng chi tiết ***
+                        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     } else {
                         container.style.display = "none";
                     }
