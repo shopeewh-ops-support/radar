@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Warehouse Overview</title>
+    <title>Putaway Route Log</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: flex-start;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             padding: 0;
         }
@@ -48,27 +48,129 @@
             border-bottom-color: #007bff;
         }
 
-        #content {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-        }
-
-        #coming-soon {
-            font-size: 5rem;
+        h1 {
+            color: #1d3557;
+            margin-bottom: 20px;
             font-weight: 700;
-            color: #ced4da;
-            letter-spacing: 2px;
         }
         
-        #ready-module {
-            margin-top: 20px;
-            font-size: 1.2rem;
+        #controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            background-color: #fff;
+            padding: 10px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+        }
+
+        #date-picker {
+            border: 1px solid #ced4da;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            outline: none;
+        }
+        #date-picker:focus {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        }
+
+        #refresh-btn {
+            padding: 8px 16px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
             font-weight: 600;
-            color: #28a745;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #refresh-btn:hover {
+            background-color: #0056b3;
+        }
+
+        #warehouse-map-container {
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .shelf { stroke: #adb5bd; stroke-width: 0.5px; }
+        .shelf-p { fill: #fff9db; }
+        .shelf-a { fill: #cfe2ff; }
+
+        .segment-divider { stroke: #ffffff; stroke-width: 1px; }
+
+        .pathway-label {
+            font-size: 16px;
+            font-weight: 600;
+            fill: #495057;
+            text-anchor: middle;
+        }
+        
+        .pathway-percentage {
+            font-size: 14px;
+            font-weight: 700;
+            fill: #dc3545;
+            text-anchor: middle;
+        }
+
+        .tooltip {
+            position: absolute; text-align: center; padding: 8px 10px;
+            font: 13px 'Inter', sans-serif; background: #212529; color: #f8f9fa;
+            border: 0px; border-radius: 8px; pointer-events: none;
+            opacity: 0; transition: opacity 0.2s; line-height: 1.5;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .interactive-segment { fill: transparent; cursor: pointer; }
+        .interactive-segment:hover { fill: rgba(23, 162, 184, 0.2); }
+        
+        .picked-dot { 
+            fill-opacity: 0.8; 
+            pointer-events: none; 
+            opacity: 0;
+        }
+
+        #radar-scanner {
+            fill: #28a745;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        #details-container {
+            margin-top: 25px;
+            margin-bottom: 40px;
+            width: 90%;
+            max-width: 1500px;
+            display: none;
+        }
+        #details-title {
+            font-size: 1.2rem; color: #1d3557; margin-bottom: 10px;
+        }
+        #details-table {
+            width: 100%; border-collapse: collapse; background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden;
+        }
+        #details-table th, #details-table td {
+            padding: 12px 15px; text-align: left; border-bottom: 1px solid #dee2e6;
+        }
+        #details-table th { background-color: #f8f9fa; font-weight: 600; }
+        #details-table tbody tr:last-child td { border-bottom: none; }
+        #details-table tbody tr:hover { background-color: #f1f3f5; }
+        
+        #details-table tbody tr.highlight-error {
+            background-color: #f8d7da; 
+            color: #721c24; 
+            font-weight: 600;
         }
     </style>
 </head>
@@ -80,10 +182,262 @@
         <a href="inv.html">Inventory Accuracy</a>
     </nav>
 
-    <div id="content">
-        <h1 id="coming-soon">COMING SOON...</h1>
-        <p id="ready-module">Outbound Pick module is ready</p>
+    <h1>Putaway Route Log</h1>
+    
+    <div id="controls">
+        <input type="date" id="date-picker">
+        <button id="refresh-btn">Refresh</button>
     </div>
 
+    <div id="warehouse-map-container">
+        <svg id="warehouse-map"></svg>
+    </div>
+
+    <div id="details-container">
+        <h2 id="details-title">Putaway Log Details</h2>
+        <table id="details-table">
+            <thead>
+                <tr>
+                    <th>SKU ID</th>
+                    <th>Location</th>
+                    <th>Cell Size</th>
+                    <th>Cell Class</th>
+                    <th>SKU Size</th>
+                    <th>SKU Class</th>
+                    <th>Operator</th>
+                    <th>Quantity</th>
+                    <th>Wrong Size</th>
+                    <th>Wrong Class</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+
+    <script>
+        // --- WAREHOUSE LAYOUT SETUP ---
+        const NUM_DOUBLE_SHELVES = 8;
+        const NUM_SINGLE_SHELVES = NUM_DOUBLE_SHELVES * 2;
+        const NUM_AISLES = NUM_DOUBLE_SHELVES - 1;
+
+        const TOP_LABEL_AREA_HEIGHT = 50; 
+        const SHELF_AREA_HEIGHT = 750;
+        const BOTTOM_PADDING = 20;
+
+        const PADDING_TOP = TOP_LABEL_AREA_HEIGHT;
+        const SHELF_LENGTH = SHELF_AREA_HEIGHT;
+        const MAP_HEIGHT = TOP_LABEL_AREA_HEIGHT + SHELF_AREA_HEIGHT + BOTTOM_PADDING;
+
+        const SHELF_DEPTH = 50;
+        const AISLE_WIDTH = 80;
+        const NUM_SEGMENTS = 24;
+        const totalLayoutWidth = (NUM_SINGLE_SHELVES * SHELF_DEPTH) + (NUM_AISLES * AISLE_WIDTH);
+        const MAP_WIDTH = totalLayoutWidth + 60;
+        const START_X = (MAP_WIDTH - totalLayoutWidth) / 2;
+        const SEGMENT_HEIGHT = SHELF_LENGTH / NUM_SEGMENTS;
+
+        const svg = d3.select("#warehouse-map").attr("width", MAP_WIDTH).attr("height", MAP_HEIGHT);
+        const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+        const interactiveSegments = [];
+
+        // --- DRAW STATIC LAYOUT ---
+        const pathwayMap = ['A-09', 'A-08', 'A-08', 'A-07', 'A-07', 'A-06', 'A-06', 'A-05', 'A-05', 'A-04', 'A-04', 'P-03', 'P-03', 'P-02', 'P-02', 'P-01'];
+        const shelves = [], dividers = [], pathwayLabels = [];
+        for (let i = 0; i < NUM_SINGLE_SHELVES; i++) {
+            const pathwayName = pathwayMap[i];
+            const pathwayType = pathwayName.split('-')[0].toLowerCase();
+            const doubleShelfIndex = Math.floor(i / 2);
+            const isLeftShelfInPair = i % 2 === 0;
+            const shelfX = START_X + doubleShelfIndex * (2 * SHELF_DEPTH + AISLE_WIDTH) + (isLeftShelfInPair ? 0 : SHELF_DEPTH);
+            shelves.push({ x: shelfX, y: PADDING_TOP, width: SHELF_DEPTH, height: SHELF_LENGTH, type: pathwayType });
+            const isLabelOdd = (NUM_SINGLE_SHELVES - 1 - i) % 2 === 0;
+            for (let j = 0; j < NUM_SEGMENTS; j++) {
+                const y = PADDING_TOP + j * SEGMENT_HEIGHT;
+                const segmentNumber = isLabelOdd ? 2 * j + 1 : 2 * j + 2;
+                const formatSegmentNumber = num => String(num).padStart(2, '0');
+                const location = `VNSL-${pathwayName}-${formatSegmentNumber(segmentNumber)}`;
+                interactiveSegments.push({ x: shelfX, y: y, width: SHELF_DEPTH, height: SEGMENT_HEIGHT, location: location });
+            }
+        }
+        const pathwayLabelData = [{ name: 'A-09', shelves: 1, startShelfIndex: 0 },{ name: 'A-08', shelves: 2, startShelfIndex: 1 },{ name: 'A-07', shelves: 2, startShelfIndex: 3 },{ name: 'A-06', shelves: 2, startShelfIndex: 5 },{ name: 'A-05', shelves: 2, startShelfIndex: 7 },{ name: 'A-04', shelves: 2, startShelfIndex: 9 },{ name: 'P-03', shelves: 2, startShelfIndex: 11 },{ name: 'P-02', shelves: 2, startShelfIndex: 13 },{ name: 'P-01', shelves: 1, startShelfIndex: 15 }];
+        pathwayLabelData.forEach(p => {
+            const startDoubleShelfIndex = Math.floor(p.startShelfIndex / 2);
+            const isLeftShelf = p.startShelfIndex % 2 === 0;
+            const groupStartX = START_X + startDoubleShelfIndex * (2 * SHELF_DEPTH + AISLE_WIDTH) + (isLeftShelf ? 0 : SHELF_DEPTH);
+            const groupWidth = (p.shelves === 1) ? SHELF_DEPTH : (2 * SHELF_DEPTH + AISLE_WIDTH);
+            const midpointX = groupStartX + groupWidth / 2;
+            pathwayLabels.push({ name: p.name, x: midpointX, y: 40 }); 
+        });
+        for (let j = 1; j < NUM_SEGMENTS; j++) { dividers.push({ x1: START_X, y1: PADDING_TOP + j * SEGMENT_HEIGHT, x2: START_X + totalLayoutWidth, y2: PADDING_TOP + j * SEGMENT_HEIGHT }); }
+        svg.selectAll(".shelf").data(shelves).enter().append("rect").attr("class", d => `shelf shelf-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height);
+        svg.selectAll(".segment-divider").data(dividers).enter().append("line").attr("class", "segment-divider").attr("x1", d => d.x1).attr("y1", d => d.y1).attr("x2", d => d.x2).attr("y2", d => d.y2);
+        svg.selectAll(".pathway-label").data(pathwayLabels).enter().append("text").attr("class", "pathway-label").attr("x", d => d.x).attr("y", d => d.y).text(d => d.name);
+        svg.selectAll(".interactive-segment").data(interactiveSegments).enter().append("rect").attr("class", "interactive-segment").attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height);
+
+        // --- FIREBASE CONNECTION & EVENT HANDLING ---
+        const firebaseConfig = { databaseURL: "https://putaway-48f76-default-rtdb.firebaseio.com/" };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
+        const datePicker = document.getElementById('date-picker');
+        const refreshBtn = document.getElementById('refresh-btn');
+        let currentDataRef = null;
+
+        function formatDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
+        datePicker.value = formatDate(new Date());
+
+        function fetchDataForDate(dateString) {
+            if (currentDataRef) { currentDataRef.off(); }
+            document.getElementById('details-container').style.display = 'none';
+            
+            currentDataRef = database.ref(dateString);
+            currentDataRef.get().then((snapshot) => {
+                const rawData = snapshot.val();
+                const processedData = processRawData(rawData);
+                updateVisualization(processedData);
+            }).catch((error) => {
+                console.error("Error fetching Firebase data:", error);
+                updateVisualization([]);
+            });
+        }
+        
+        function processRawData(rawData) {
+            if (!rawData) return [];
+            
+            return Object.values(rawData).map(item => {
+                const locationParts = item.to_location_id ? item.to_location_id.split('-') : [];
+                const formatted_location = locationParts.length >= 4 ? 
+                    `${locationParts[0]}-${locationParts[1]}-${locationParts[2]}-${locationParts[3]}` : 
+                    'N/A';
+                
+                let color = '#28a745'; // Green
+                if (item.wrong_size === 'Y' && item.wrong_class === 'Y') {
+                    color = '#dc3545'; // Red
+                } else if (item.wrong_size === 'Y' || item.wrong_class === 'Y') {
+                    color = '#ffc107'; // Yellow
+                }
+
+                return { ...item, formatted_location, color };
+            });
+        }
+
+
+        datePicker.addEventListener('change', () => fetchDataForDate(datePicker.value));
+        refreshBtn.addEventListener('click', () => fetchDataForDate(datePicker.value));
+        
+        // UPDATED: Wait for the window to load before fetching initial data
+        window.addEventListener('load', () => {
+            fetchDataForDate(datePicker.value);
+        });
+
+        function updateVisualization(processedData) {
+            const dataByLocation = processedData.reduce((acc, item) => {
+                if(item.formatted_location !== 'N/A') {
+                    if (!acc[item.formatted_location]) {
+                        acc[item.formatted_location] = [];
+                    }
+                    acc[item.formatted_location].push(item);
+                }
+                return acc;
+            }, {});
+
+            drawColoredPickDots(processedData);
+            runScanAnimation(); 
+            bindEventListeners(dataByLocation);
+        }
+
+        function drawColoredPickDots(processedData) {
+            svg.selectAll(".picked-dot").remove();
+            const dotsGroup = svg.append("g");
+
+            processedData.forEach(item => {
+                const segment = interactiveSegments.find(s => s.location === item.formatted_location);
+                if (segment) {
+                    const offsetX = (Math.random() - 0.5) * (segment.width * 0.7);
+                    const offsetY = (Math.random() - 0.5) * (segment.height * 0.8);
+                    dotsGroup.append("circle")
+                        .attr("class", "picked-dot")
+                        .attr("cx", segment.x + segment.width / 2 + offsetX)
+                        .attr("cy", segment.y + segment.height / 2 + offsetY)
+                        .attr("r", 3.5)
+                        .style("fill", item.color);
+                }
+            });
+        }
+
+        function runScanAnimation() {
+            svg.select("#radar-scanner").remove();
+            const sortedDots = svg.selectAll(".picked-dot").nodes().sort((a, b) => d3.select(a).attr("cy") - d3.select(b).attr("cy"));
+            if (sortedDots.length === 0) return;
+
+            let lastRevealedIndex = 0;
+            const scanner = svg.append("rect").attr("id", "radar-scanner").attr("x", START_X).attr("y", PADDING_TOP).attr("width", totalLayoutWidth).attr("height", 10);
+            
+            scanner.transition().duration(1500).ease(d3.easeLinear).attr("y", MAP_HEIGHT)
+                .tween("scanner.reveal", function() {
+                    return function(t) {
+                        const currentY = PADDING_TOP + (SHELF_LENGTH * t);
+                        while (lastRevealedIndex < sortedDots.length && d3.select(sortedDots[lastRevealedIndex]).attr("cy") <= currentY) {
+                            d3.select(sortedDots[lastRevealedIndex]).style("opacity", 1);
+                            lastRevealedIndex++;
+                        }
+                    };
+                })
+                .on("end", () => {
+                    d3.selectAll(".picked-dot").style("opacity", 1);
+                    scanner.remove();
+                });
+        }
+
+        function bindEventListeners(dataByLocation) {
+            svg.selectAll(".interactive-segment")
+                .on("mouseover", function(event, d) {
+                    const itemsInSegment = dataByLocation[d.location] || [];
+                    const count = itemsInSegment.length;
+                    tooltip.transition().duration(200).style("opacity", .95);
+                    tooltip.html(`<strong>${d.location}</strong><br>Records: ${count}`).style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px");
+                })
+                .on("mousemove", (event, d) => tooltip.style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px"))
+                .on("mouseout", () => tooltip.transition().duration(500).style("opacity", 0))
+                .on("click", (event, d) => {
+                    const details = dataByLocation[d.location] || [];
+                    const container = document.getElementById('details-container');
+                    const tableBody = document.querySelector("#details-table tbody");
+                    document.getElementById('details-title').textContent = `Putaway Log Details: ${d.location}`;
+                    tableBody.innerHTML = "";
+                    
+                    if (details.length > 0) {
+                        details.forEach(item => {
+                            const row = tableBody.insertRow();
+                            
+                            if (item.wrong_size === 'Y' || item.wrong_class === 'Y') {
+                                row.classList.add('highlight-error');
+                            }
+
+                            row.innerHTML = `
+                                <td>${item.sku_id || 'N/A'}</td>
+                                <td>${item.to_location_id || 'N/A'}</td>
+                                <td>${(Array.isArray(item.cell_size) ? item.cell_size.join(', ') : item.cell_size) || 'N/A'}</td>
+                                <td>${item.cell_class || 'N/A'}</td>
+                                <td>${item.sku_size || 'N/A'}</td>
+                                <td>${item.sku_class || 'N/A'}</td>
+                                <td>${item.operator || 'N/A'}</td>
+                                <td>${item.quantity || 'N/A'}</td>
+                                <td>${item.wrong_size || 'N/A'}</td>
+                                <td>${item.wrong_class || 'N/A'}</td>
+                            `;
+                        });
+                        container.style.display = "block";
+                        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        container.style.display = "none";
+                    }
+                });
+        }
+    </script>
 </body>
 </html>
