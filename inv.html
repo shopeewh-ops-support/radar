@@ -74,11 +74,16 @@
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: background-color 0.2s, opacity 0.2s;
             background-color: #007bff;
         }
         #refresh-btn:hover {
             background-color: #0056b3;
+        }
+        #refresh-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.7;
         }
 
         #warehouse-map-container {
@@ -175,40 +180,9 @@
             color: #721c24; 
             font-weight: 600;
         }
-
-        /* --- Loader Styles --- */
-        .loader-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            display: none; /* Hidden by default */
-        }
-        .loader {
-            border: 8px solid #f3f3f3;
-            border-top: 8px solid #007bff;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1.5s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
-    <div id="loader-overlay">
-        <div class="loader"></div>
-    </div>
-
     <nav id="main-nav">
         <a href="inv.html" class="active">Bizline</a>
         <a href="size.html">Size</a>
@@ -248,11 +222,30 @@
     <script>
         const svg = d3.select("#warehouse-map");
         const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+        const refreshBtn = document.getElementById('refresh-btn');
         let fullInventoryData = []; 
 
-        function drawLayout() {
-            document.getElementById('loader-overlay').style.display = 'flex';
-            
+        let firebaseApp;
+        let database;
+
+        /**
+         * Initializes the Firebase connection if it hasn't been already.
+         * This should only be called once.
+         */
+        function initializeFirebase() {
+            if (!firebaseApp) {
+                const firebaseConfig = { databaseURL: "https://onhand-92a36-default-rtdb.firebaseio.com/" };
+                firebaseApp = firebase.initializeApp(firebaseConfig);
+                database = firebase.database();
+            }
+        }
+
+        /**
+         * Draws the static SVG map of the warehouse without any data.
+         * This includes shelves, zones, and labels.
+         * @returns {Array} An array of interactive segment objects.
+         */
+        function drawMap() {
             // Clear previous drawing
             svg.selectAll("*").remove();
             
@@ -403,15 +396,38 @@
             svg.selectAll(".zone-boundary").data(zoneBoundaries).enter().append("rect").attr("class", "zone-boundary").attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height).attr("rx", d => d.rx);
             svg.selectAll(".shelf").data(shelves).enter().append("rect").attr("class", d => `shelf shelf-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height);
             svg.selectAll(".pathway-label").data(pathwayLabels).enter().append("text").attr("class", d => `pathway-label pathway-label-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).text(d => d.name);
-            svg.selectAll(".interactive-segment").data(interactiveSegments).enter().append("rect").attr("class", "interactive-segment").attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height).style("fill-opacity", 0);
+            svg.selectAll(".interactive-segment").data(interactiveSegments).enter().append("rect")
+                .attr("class", "interactive-segment")
+                .attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height)
+                .style("fill", "transparent"); // Let the shelf color show through initially
             
-            fetchData(interactiveSegments);
+            return interactiveSegments;
         }
 
-        // --- FIREBASE AND DATA HANDLING ---
-        const firebaseConfig = { databaseURL: "https://onhand-92a36-default-rtdb.firebaseio.com/" };
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        /**
+         * Function called on initial page load. Draws the map and sets placeholder tooltips.
+         */
+        function initialDraw() {
+            const segments = drawMap();
+            svg.selectAll(".interactive-segment")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition().duration(200).style("opacity", .95);
+                    tooltip.html(`<strong>${d.location}</strong><br>Click 'Scan by Radar' to load data`)
+                           .style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px");
+                })
+                .on("mousemove", (event) => tooltip.style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px"))
+                .on("mouseout", () => tooltip.transition().duration(500).style("opacity", 0));
+        }
+
+        /**
+         * Function called by the Refresh button. Initializes Firebase, redraws map, and fetches data.
+         */
+        function startRefresh() {
+            refreshBtn.disabled = true;
+            initializeFirebase();
+            const segments = drawMap();
+            fetchData(segments);
+        }
         
         function fetchData(interactiveSegments) {
             const dataRef = database.ref('onhand');
@@ -420,7 +436,8 @@
                 processAndVisualizeData(fullInventoryData, interactiveSegments);
             }).catch((error) => {
                 console.error("Firebase data fetch error:", error);
-                document.getElementById('loader-overlay').style.display = 'none';
+            }).finally(() => {
+                refreshBtn.disabled = false;
             });
         }
 
@@ -459,6 +476,7 @@
         function updateVisualization(segmentData, interactiveSegments) {
             svg.selectAll(".interactive-segment")
                 .data(interactiveSegments)
+                .style("fill", null) // Remove inline style to allow CSS classes to take over
                 .attr('class', 'interactive-segment')
                 .each(function(d) {
                     const segmentInfo = segmentData[d.location];
@@ -467,11 +485,14 @@
                     else segmentElement.classed('status-nodata', true);
                 });
             
-            document.getElementById('loader-overlay').style.display = 'none';
             runScanAnimation();
             bindEventListeners(segmentData);
         }
 
+        /**
+         * Runs the scanner animation.
+         * This version uses delayed transitions on each segment for a more robust effect.
+         */
         function runScanAnimation() {
             svg.select("#radar-scanner").remove();
             const allSegments = svg.selectAll(".interactive-segment");
@@ -480,6 +501,7 @@
             const MAP_WIDTH = svg.attr("width");
             const MAP_HEIGHT = svg.attr("height");
             const SCANNER_HEIGHT = 100;
+            const DURATION = 3500;
 
             const scanner = svg.append("rect")
                 .attr("id", "radar-scanner")
@@ -489,34 +511,26 @@
                 .attr("height", SCANNER_HEIGHT)
                 .style("fill", "url(#scan-gradient)");
 
+            // Animate scanner bar
             scanner.transition()
-                .duration(3500)
+                .duration(DURATION)
                 .ease(d3.easeLinear)
                 .attr("y", MAP_HEIGHT)
-                .tween("scanner.reveal", function() {
-                    const scannerRect = this;
-                    return function() { 
-                        const scannerTop = parseFloat(d3.select(scannerRect).attr("y"));
-                        const scannerLeadingEdge = scannerTop + (SCANNER_HEIGHT * 0.95);
-
-                        allSegments.each(function() {
-                            const segment = d3.select(this);
-                            if (parseFloat(segment.style("fill-opacity")) < 0.1) {
-                                const segmentY = parseFloat(segment.attr("y"));
-                                const segmentHeight = parseFloat(segment.attr("height"));
-                                const segmentCenterY = segmentY + segmentHeight / 2;
-
-                                if (segmentCenterY <= scannerLeadingEdge) {
-                                    segment.style("fill-opacity", 0.85);
-                                }
-                            }
-                        });
-                    };
-                })
                 .on("end", () => {
+                    // Ensure all segments are fully visible at the end as a fallback
                     allSegments.style("fill-opacity", 0.85);
                     scanner.remove();
                 });
+
+            // Animate each segment's opacity with a calculated delay based on its position
+            allSegments.transition()
+                .duration(400) // How long each segment takes to fade in
+                .delay(function() {
+                    const segmentY = parseFloat(d3.select(this).attr("y"));
+                    // Calculate delay proportionally to the segment's vertical position
+                    return (segmentY / MAP_HEIGHT) * DURATION;
+                })
+                .style("fill-opacity", 0.85);
         }
 
         function bindEventListeners(segmentData) {
@@ -562,9 +576,9 @@
         }
         
         // --- INITIALIZATION ---
-        document.getElementById('refresh-btn').addEventListener('click', drawLayout);
+        refreshBtn.addEventListener('click', startRefresh);
         
-        drawLayout(); // Initial draw
+        initialDraw(); // Initial draw without data
     </script>
 </body>
 </html>
