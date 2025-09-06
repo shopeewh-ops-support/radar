@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Warehouse Dashboard</title>
+    <title>Warehouse Inventory Accuracy</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- D3.js library for charts -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         body {
             font-family: 'Inter', Arial, sans-serif;
             background-color: #f0f2f5;
             color: #333;
-            margin: 0;
-            padding: 0;
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
         }
 
         #main-nav {
@@ -29,8 +29,7 @@
             display: flex;
             justify-content: flex-start;
             align-items: center;
-            box-sizing: border-box;
-            flex-shrink: 0;
+            margin-bottom: 20px;
         }
         #main-nav a {
             padding: 18px 20px;
@@ -40,7 +39,6 @@
             font-size: 15px;
             border-bottom: 3px solid transparent;
             transition: color 0.2s, border-bottom-color 0.2s;
-            cursor: pointer;
         }
         #main-nav a:hover {
             color: #007bff;
@@ -49,100 +47,525 @@
             color: #007bff;
             border-bottom-color: #007bff;
         }
-        #content-area {
-            padding: 24px;
-            flex-grow: 1;
-            overflow-y: auto;
+
+        h1 {
+            color: #1d3557;
+            margin-bottom: 20px;
+            font-weight: 700;
         }
-        .loading-text {
-            text-align: center;
-            font-size: 1.5rem;
-            color: #888;
-            margin-top: 40px;
+        
+        #controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            background-color: #fff;
+            padding: 10px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+        }
+
+        #refresh-btn {
+            padding: 8px 16px;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            background-color: #007bff;
+        }
+        #refresh-btn:hover {
+            background-color: #0056b3;
+        }
+
+        #warehouse-map-container {
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+            overflow: auto; /* Allow scrolling if content overflows */
+            margin-bottom: 25px;
+        }
+
+        .shelf { stroke: #adb5bd; stroke-width: 0.5px; }
+        .shelf-p { fill: #fff9db; }
+        .shelf-a { fill: #cfe2ff; }
+        .shelf-c { fill: #d1e7dd; }
+        .segment-divider { stroke: #ffffff; stroke-width: 1px; }
+
+        .pathway-label {
+            font-weight: 600;
+            fill: #495057;
+        }
+        .pathway-label-zone {
+            font-size: 16px;
+            font-weight: 700;
+            text-anchor: middle;
+        }
+        .pathway-label-number {
+            font-size: 12px;
+            fill: #6c757d;
+            text-anchor: middle;
+        }
+        .pathway-label-horizontal {
+            writing-mode: tb;
+            text-anchor: middle;
+            font-size: 12px;
+            fill: #6c757d;
+        }
+
+        .zone-boundary {
+            fill: none;
+            stroke: #007bff;
+            stroke-width: 2.5px;
+            stroke-dasharray: 8 5;
+        }
+        
+        .tooltip {
+            position: absolute; text-align: center; padding: 8px 10px;
+            font: 13px 'Inter', sans-serif; background: #212529; color: #f8f9fa;
+            border: 0px; border-radius: 8px; pointer-events: none;
+            opacity: 0; transition: opacity 0.2s; line-height: 1.5;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .interactive-segment { 
+            cursor: pointer; 
+        }
+        
+        .status-error { fill: #e63946; }
+        .status-warning { fill: #fca311; }
+        .status-nodata { fill: #ced4da; }
+        .status-ok { fill: transparent; }
+
+        #radar-scanner {
+            pointer-events: none;
+        }
+        
+        #details-container {
+            margin-bottom: 40px;
+            width: 90%;
+            max-width: 1500px;
+            display: none;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+        #details-title {
+            font-size: 1.2rem; color: #1d3557; margin-bottom: 10px;
+        }
+        #details-table {
+            width: 100%; border-collapse: collapse; background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); border-radius: 8px; overflow: hidden;
+        }
+        #details-table th, #details-table td {
+            padding: 12px 15px; text-align: left; border-bottom: 1px solid #dee2e6;
+        }
+        #details-table th { background-color: #f8f9fa; font-weight: 600; }
+        #details-table tbody tr:last-child td { border-bottom: none; }
+        #details-table tbody tr:hover { background-color: #f1f3f5; }
+        
+        #details-table tbody tr.highlight-error {
+            background-color: #f8d7da; 
+            color: #721c24; 
+            font-weight: 600;
+        }
+
+        /* --- Loader Styles --- */
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            display: none; /* Hidden by default */
+        }
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #007bff;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1.5s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
+    <div id="loader-overlay">
+        <div class="loader"></div>
+    </div>
+
     <nav id="main-nav">
-        <a data-page="overview.html">Overview</a>
-        <a data-page="obpick.html">Outbound Pick</a>
-        <a data-page="put.html">Putaway</a>
-        <a data-page="inv.html" class="active">Inventory Accuracy</a>
+        <a href="inv.html" class="active">Bizline</a>
+        <a href="size.html">Size</a>
+        <a href="class.html">Class</a>
+        <a href="qtysku.html">Qty SKU per Location</a>
     </nav>
 
-    <main id="content-area">
-        <!-- Content from other pages will be loaded here -->
-    </main>
+    <h1>Inventory Accuracy by Bizline</h1>
+    
+    <div id="controls">
+        <button id="refresh-btn">Scan by Radar</button>
+    </div>
+
+    <div id="warehouse-map-container">
+        <svg id="warehouse-map"></svg>
+    </div>
+
+    <div id="details-container">
+        <h2 id="details-title">Details</h2>
+        <table id="details-table">
+            <thead>
+                <tr>
+                    <th>SKU ID</th>
+                    <th>On Hand</th>
+                    <th>Location ID</th>
+                    <th>Bizline</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const navLinks = document.querySelectorAll('#main-nav a');
-            const contentArea = document.getElementById('content-area');
-            const initialPage = document.querySelector('#main-nav a.active').getAttribute('data-page');
+        const svg = d3.select("#warehouse-map");
+        const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+        let fullInventoryData = []; 
 
-            // --- Function to load and execute scripts ---
-            // We need to re-create script tags for them to be executed by the browser when added to the DOM.
-            const executeScripts = (containerElement) => {
-                const scripts = containerElement.querySelectorAll('script');
-                scripts.forEach(oldScript => {
-                    const newScript = document.createElement('script');
-                    // Copy attributes (like src, type)
-                    Array.from(oldScript.attributes).forEach(attr => {
-                        newScript.setAttribute(attr.name, attr.value);
-                    });
-                    // Copy inline script content
-                    if (oldScript.innerHTML) {
-                        newScript.innerHTML = oldScript.innerHTML;
-                    }
-                    // Append the new script to the head to execute it
-                    document.head.appendChild(newScript);
-                    // Clean up by removing the script after appending
-                    document.head.removeChild(newScript);
-                });
-            };
+        function drawLayout() {
+            document.getElementById('loader-overlay').style.display = 'flex';
             
-            // --- Function to fetch and display content ---
-            async function loadContent(page) {
-                // Show loading state
-                contentArea.innerHTML = '<h2 class="loading-text">Loading...</h2>';
-                try {
-                    const response = await fetch(page);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    const html = await response.text();
-                    
-                    contentArea.innerHTML = html;
-                    executeScripts(contentArea);
+            // Clear previous drawing
+            svg.selectAll("*").remove();
+            
+            // Define gradient for radar scanner with a trail
+            const defs = svg.append("defs");
+            const linearGradient = defs.append("linearGradient")
+                .attr("id", "scan-gradient")
+                .attr("x1", "0%").attr("y1", "0%")
+                .attr("x2", "0%").attr("y2", "100%");
+            linearGradient.append("stop").attr("offset", "0%").style("stop-color", "#28a745").style("stop-opacity", 0.05);
+            linearGradient.append("stop").attr("offset", "85%").style("stop-color", "#28a745").style("stop-opacity", 0.2);
+            linearGradient.append("stop").attr("offset", "95%").style("stop-color", "#33ff57").style("stop-opacity", 0.8);
+            linearGradient.append("stop").attr("offset", "100%").style("stop-color", "#33ff57").style("stop-opacity", 0);
 
-                } catch (error) {
-                    console.error('Failed to load page:', error);
-                    contentArea.innerHTML = `<h2>Error loading page: ${page}</h2><p>${error.message}</p><p>Please make sure you are running this from a local web server.</p>`;
+            let interactiveSegments = [];
+            let shelves = [];
+            let pathwayLabels = [];
+            let zoneBoundaries = [];
+
+            const PADDING = 40;
+            const SPACING = 80;
+
+            // --- PALLET ZONE (HORIZONTAL) CONSTANTS ---
+            const H_SHELF_AREA_LENGTH = 1200;
+            const H_LABEL_AREA_WIDTH = 40;
+            const H_SHELF_DEPTH = 50;
+            const H_AISLE_WIDTH = 50;
+            const H_NUM_SEGMENTS = 15;
+            const H_SEGMENT_WIDTH = H_SHELF_AREA_LENGTH / H_NUM_SEGMENTS;
+
+            // --- SHELVING ZONE (VERTICAL) CONSTANTS ---
+            const V_NUM_DOUBLE_SHELVES = 8;
+            const V_NUM_SINGLE_SHELVES = V_NUM_DOUBLE_SHELVES * 2;
+            const V_NUM_AISLES = V_NUM_DOUBLE_SHELVES - 1;
+            const V_LABEL_AREA_HEIGHT = 50;
+            const V_SHELF_DEPTH = 50;
+            const V_AISLE_WIDTH = 80;
+            
+            // --- MODIFIED CONSTANTS FOR VERTICAL LAYOUT ---
+            const V_NUM_SEGMENTS_TOTAL = 14;
+            const V_NUM_SEGMENTS_PER_BLOCK = 7;
+            const V_AISLE_GAP_HEIGHT = 60; 
+            const V_SEGMENT_HEIGHT = 50;  
+            const V_SHELF_BLOCK_HEIGHT = V_NUM_SEGMENTS_PER_BLOCK * V_SEGMENT_HEIGHT;
+            const V_SHELF_AREA_HEIGHT = (V_SHELF_BLOCK_HEIGHT * 2) + V_AISLE_GAP_HEIGHT;
+            
+            // --- CALCULATE DIMENSIONS ---
+            const palletConfig = [
+                { name: 'PC-05', type: 'single' }, { name: ['PC-04', 'PC-03'], type: 'double' }, { name: ['PC-02', 'PC-01'], type: 'double' },
+                null, 
+                { name: ['LC-05', 'LC-04'], type: 'double' }, { name: ['LC-03', 'LC-02'], type: 'double' }, { name: 'LC-01', type: 'single' }
+            ];
+
+            let palletLayoutHeight = 0;
+            palletConfig.forEach(config => {
+                if (config === null) palletLayoutHeight += H_AISLE_WIDTH * 2;
+                else if (config.type === 'single') palletLayoutHeight += H_SHELF_DEPTH + H_AISLE_WIDTH;
+                else palletLayoutHeight += (H_SHELF_DEPTH * 2) + H_AISLE_WIDTH;
+            });
+            palletLayoutHeight -= H_AISLE_WIDTH;
+            const palletLayoutWidth = H_SHELF_AREA_LENGTH + H_LABEL_AREA_WIDTH;
+            const shelvingLayoutWidth = (V_NUM_SINGLE_SHELVES * V_SHELF_DEPTH) + (V_NUM_AISLES * V_AISLE_WIDTH);
+            const shelvingLayoutHeight = V_SHELF_AREA_HEIGHT + V_LABEL_AREA_HEIGHT;
+            
+            const MAP_WIDTH = PADDING + Math.max(palletLayoutWidth, shelvingLayoutWidth) + PADDING;
+            const MAP_HEIGHT = PADDING + palletLayoutHeight + SPACING + shelvingLayoutHeight + PADDING;
+
+            svg.attr("width", MAP_WIDTH).attr("height", MAP_HEIGHT);
+
+            // --- 1. DRAW PALLET ZONE (TOP) ---
+            let h_currentY = PADDING;
+            const h_startX = (MAP_WIDTH - palletLayoutWidth) / 2 + H_LABEL_AREA_WIDTH;
+            
+            palletConfig.forEach(config => {
+                if (config === null) { h_currentY += H_AISLE_WIDTH * 2; return; }
+                if (config.type === 'single') {
+                    shelves.push({ x: h_startX, y: h_currentY, width: H_SHELF_AREA_LENGTH, height: H_SHELF_DEPTH, type: 'c', pathway: config.name });
+                    pathwayLabels.push({ name: config.name.slice(-2), x: h_startX - 15, y: h_currentY + H_SHELF_DEPTH / 2, type: 'horizontal' });
+                    h_currentY += H_SHELF_DEPTH + H_AISLE_WIDTH;
+                } else {
+                    const topShelfY = h_currentY;
+                    shelves.push({ x: h_startX, y: topShelfY, width: H_SHELF_AREA_LENGTH, height: H_SHELF_DEPTH, type: 'c', pathway: config.name[0] });
+                    pathwayLabels.push({ name: config.name[0].slice(-2), x: h_startX - 15, y: topShelfY + H_SHELF_DEPTH / 2, type: 'horizontal' });
+                    const bottomShelfY = h_currentY + H_SHELF_DEPTH;
+                    shelves.push({ x: h_startX, y: bottomShelfY, width: H_SHELF_AREA_LENGTH, height: H_SHELF_DEPTH, type: 'c', pathway: config.name[1] });
+                    pathwayLabels.push({ name: config.name[1].slice(-2), x: h_startX - 15, y: bottomShelfY + H_SHELF_DEPTH / 2, type: 'horizontal' });
+                    h_currentY += (2 * H_SHELF_DEPTH) + H_AISLE_WIDTH;
                 }
-            }
-
-            // --- Event listeners for navigation links ---
-            navLinks.forEach(link => {
-                link.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    
-                    const currentActive = document.querySelector('#main-nav a.active');
-                    if(currentActive) {
-                        currentActive.classList.remove('active');
-                    }
-                    
-                    link.classList.add('active');
-                    
-                    const pageToLoad = link.getAttribute('data-page');
-                    loadContent(pageToLoad);
-                });
             });
 
-            // --- Load the default page when the website opens ---
-            if (initialPage) {
-                loadContent(initialPage);
+            // --- 2. DRAW SHELVING ZONE (BOTTOM) ---
+            const v_startY = PADDING + palletLayoutHeight + SPACING;
+            const v_startX = (MAP_WIDTH - shelvingLayoutWidth) / 2;
+            let v_currentX = v_startX;
+            const verticalPathwayMap = ['LA-01', 'LA-02', 'LB-01', 'LB-02', 'LB-03', 'LB-04', 'LB-05', 'LB-06', 'PA-01', 'PA-02', 'PA-03', 'PA-04', 'PB-01', 'PB-02', 'PB-03', 'PB-04'];
+            const verticalShelfNumberMap = ['01','02', '01','02','03','04','05','06', '01','02','03','04', '01','02','03','04'];
+
+            for (let i = 0; i < V_NUM_DOUBLE_SHELVES; i++) {
+                const pathway1 = verticalPathwayMap[i*2], pathway2 = verticalPathwayMap[i*2 + 1];
+                const yBlock1 = v_startY + V_LABEL_AREA_HEIGHT;
+                const yBlock2 = yBlock1 + V_SHELF_BLOCK_HEIGHT + V_AISLE_GAP_HEIGHT;
+                const type1 = pathway1.startsWith('L') ? 'a' : 'p';
+                const type2 = pathway2.startsWith('L') ? 'a' : 'p';
+                shelves.push({ x: v_currentX, y: yBlock1, width: V_SHELF_DEPTH, height: V_SHELF_BLOCK_HEIGHT, type: type1, pathway: pathway1, block: 1 });
+                shelves.push({ x: v_currentX, y: yBlock2, width: V_SHELF_DEPTH, height: V_SHELF_BLOCK_HEIGHT, type: type1, pathway: pathway1, block: 2 });
+                shelves.push({ x: v_currentX + V_SHELF_DEPTH, y: yBlock1, width: V_SHELF_DEPTH, height: V_SHELF_BLOCK_HEIGHT, type: type2, pathway: pathway2, block: 1 });
+                shelves.push({ x: v_currentX + V_SHELF_DEPTH, y: yBlock2, width: V_SHELF_DEPTH, height: V_SHELF_BLOCK_HEIGHT, type: type2, pathway: pathway2, block: 2 });
+                pathwayLabels.push({ name: verticalShelfNumberMap[i*2], x: v_currentX + V_SHELF_DEPTH/2, y: v_startY + V_LABEL_AREA_HEIGHT - 15, type: 'number' });
+                pathwayLabels.push({ name: verticalShelfNumberMap[i*2 + 1], x: v_currentX + V_SHELF_DEPTH * 1.5, y: v_startY + V_LABEL_AREA_HEIGHT - 15, type: 'number' });
+                v_currentX += (2 * V_SHELF_DEPTH) + V_AISLE_WIDTH;
             }
-        });
+
+            // --- 3. GENERATE ZONES & SEGMENTS FOR BOTH ---
+            const zoneData = [ { name: 'LC' }, { name: 'PC' }, { name: 'LA' }, { name: 'LB' }, { name: 'PA' }, { name: 'PB' } ];
+            zoneData.forEach(zone => {
+                const zoneShelves = shelves.filter(s => s.pathway.startsWith(zone.name));
+                if (zoneShelves.length === 0) return;
+                const xMin = d3.min(zoneShelves, d => d.x), xMax = d3.max(zoneShelves, d => d.x + d.width);
+                const yMin = d3.min(zoneShelves, d => d.y), yMax = d3.max(zoneShelves, d => d.y + d.height);
+                const isHorizontal = zone.name.includes('C');
+                if (isHorizontal) {
+                    pathwayLabels.push({ name: zone.name, x: xMin + (xMax - xMin) / 2, y: yMin - 15, type: 'zone' });
+                    zoneBoundaries.push({ x: xMin - 5, y: yMin - 5, width: xMax - xMin + 10, height: yMax - yMin + 10, rx: 8 });
+                } else {
+                    pathwayLabels.push({ name: zone.name, x: xMin + (xMax - xMin) / 2, y: yMin - 35, type: 'zone' });
+                    zoneBoundaries.push({ x: xMin - 5, y: yMin - 30, width: xMax - xMin + 10, height: yMax - yMin + 40, rx: 8 });
+                }
+            });
+            
+            shelves.forEach(shelf => {
+                const isHorizontal = shelf.pathway.includes('C');
+                if (isHorizontal) {
+                    for (let j = 0; j < H_NUM_SEGMENTS; j++) {
+                        const segmentNumber = j + 1;
+                        const location = `VNVL-${shelf.pathway}-${String(segmentNumber).padStart(2, '0')}`;
+                        interactiveSegments.push({ x: shelf.x + j * H_SEGMENT_WIDTH, y: shelf.y, width: H_SEGMENT_WIDTH, height: shelf.height, location: location });
+                    }
+                } else {
+                    for (let j = 0; j < V_NUM_SEGMENTS_PER_BLOCK; j++) {
+                        let segmentNumber = (shelf.block === 1) ? (j + 1) : (j + 1 + V_NUM_SEGMENTS_PER_BLOCK);
+                        const location = `VNVL-${shelf.pathway}-${String(segmentNumber).padStart(2, '0')}`;
+                        interactiveSegments.push({ x: shelf.x, y: shelf.y + j * V_SEGMENT_HEIGHT, width: shelf.width, height: V_SEGMENT_HEIGHT, location: location });
+                    }
+                }
+            });
+
+            // --- 4. RENDER SVG ELEMENTS ---
+            svg.selectAll(".zone-boundary").data(zoneBoundaries).enter().append("rect").attr("class", "zone-boundary").attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height).attr("rx", d => d.rx);
+            svg.selectAll(".shelf").data(shelves).enter().append("rect").attr("class", d => `shelf shelf-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height);
+            svg.selectAll(".pathway-label").data(pathwayLabels).enter().append("text").attr("class", d => `pathway-label pathway-label-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).text(d => d.name);
+            svg.selectAll(".interactive-segment").data(interactiveSegments).enter().append("rect").attr("class", "interactive-segment").attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height).style("fill-opacity", 0);
+            
+            fetchData(interactiveSegments);
+        }
+
+        // --- FIREBASE AND DATA HANDLING ---
+        const firebaseConfig = { databaseURL: "https://onhand-92a36-default-rtdb.firebaseio.com/" };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
+        function fetchData(interactiveSegments) {
+            const dataRef = database.ref('onhand');
+            dataRef.get().then((snapshot) => {
+                fullInventoryData = snapshot.val() ? Object.values(snapshot.val()) : [];
+                processAndVisualizeData(fullInventoryData, interactiveSegments);
+            }).catch((error) => {
+                console.error("Firebase data fetch error:", error);
+                document.getElementById('loader-overlay').style.display = 'none';
+            });
+        }
+
+        function processAndVisualizeData(data, interactiveSegments) {
+            const segmentData = {};
+            data.forEach(item => {
+                if (!item.location_id) return;
+                const segmentId = item.location_id.split('-').slice(0, 4).join('-');
+                
+                if (!segmentData[segmentId]) {
+                    segmentData[segmentId] = { items: [], hasMismatch: false, liteSkuCount: 0, plusSkuCount: 0 };
+                }
+
+                const zoneType = segmentId.split('-')[1].charAt(0);
+                const isLiteZone = zoneType === 'L';
+                const isPlusZone = zoneType === 'P';
+                
+                let itemMismatch = (item.bizline === 'Lite' && isPlusZone) || (item.bizline === 'Plus' && isLiteZone);
+                if(itemMismatch) {
+                    segmentData[segmentId].hasMismatch = true;
+                }
+                item.hasMismatch = itemMismatch;
+
+                if (item.bizline === 'Lite') segmentData[segmentId].liteSkuCount++;
+                else if (item.bizline === 'Plus') segmentData[segmentId].plusSkuCount++;
+
+                segmentData[segmentId].items.push(item);
+            });
+
+            for (const id in segmentData) {
+                segmentData[id].status = segmentData[id].hasMismatch ? 'error' : 'ok';
+            }
+            updateVisualization(segmentData, interactiveSegments);
+        }
+
+        function updateVisualization(segmentData, interactiveSegments) {
+            svg.selectAll(".interactive-segment")
+                .data(interactiveSegments)
+                .attr('class', 'interactive-segment')
+                .each(function(d) {
+                    const segmentInfo = segmentData[d.location];
+                    const segmentElement = d3.select(this);
+                    if (segmentInfo) segmentElement.classed(`status-${segmentInfo.status}`, true);
+                    else segmentElement.classed('status-nodata', true);
+                });
+            
+            document.getElementById('loader-overlay').style.display = 'none';
+            runScanAnimation();
+            bindEventListeners(segmentData);
+        }
+
+        function runScanAnimation() {
+            svg.select("#radar-scanner").remove();
+            const allSegments = svg.selectAll(".interactive-segment");
+            allSegments.style("fill-opacity", 0);
+            
+            const MAP_WIDTH = svg.attr("width");
+            const MAP_HEIGHT = svg.attr("height");
+            const SCANNER_HEIGHT = 100;
+
+            const scanner = svg.append("rect")
+                .attr("id", "radar-scanner")
+                .attr("x", 0)
+                .attr("y", -SCANNER_HEIGHT)
+                .attr("width", MAP_WIDTH)
+                .attr("height", SCANNER_HEIGHT)
+                .style("fill", "url(#scan-gradient)");
+
+            scanner.transition()
+                .duration(3500)
+                .ease(d3.easeLinear)
+                .attr("y", MAP_HEIGHT)
+                .tween("scanner.reveal", function() {
+                    const scannerRect = this;
+                    return function() { 
+                        const scannerTop = parseFloat(d3.select(scannerRect).attr("y"));
+                        const scannerLeadingEdge = scannerTop + (SCANNER_HEIGHT * 0.95);
+
+                        allSegments.each(function() {
+                            const segment = d3.select(this);
+                            if (parseFloat(segment.style("fill-opacity")) < 0.1) {
+                                const segmentY = parseFloat(segment.attr("y"));
+                                const segmentHeight = parseFloat(segment.attr("height"));
+                                const segmentCenterY = segmentY + segmentHeight / 2;
+
+                                if (segmentCenterY <= scannerLeadingEdge) {
+                                    segment.style("fill-opacity", 0.85);
+                                }
+                            }
+                        });
+                    };
+                })
+                .on("end", () => {
+                    allSegments.style("fill-opacity", 0.85);
+                    scanner.remove();
+                });
+        }
+
+        function bindEventListeners(segmentData) {
+            svg.selectAll(".interactive-segment")
+                .on("mouseover", function(event, d) {
+                    const segmentInfo = segmentData[d.location];
+                    let tooltipHtml = `<strong>${d.location}</strong>`;
+                    if (segmentInfo) {
+                        tooltipHtml += `<br>Lite SKUs: ${segmentInfo.liteSkuCount || 0}<br>Plus SKUs: ${segmentInfo.plusSkuCount || 0}`;
+                    } else {
+                        tooltipHtml += `<br>No data available`;
+                    }
+                    tooltip.transition().duration(200).style("opacity", .95);
+                    tooltip.html(tooltipHtml).style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px");
+                })
+                .on("mousemove", (event) => tooltip.style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 15) + "px"))
+                .on("mouseout", () => tooltip.transition().duration(500).style("opacity", 0))
+                .on("click", (event, d) => {
+                    const segmentId = d.location;
+                    const details = fullInventoryData.filter(item => {
+                        if (!item.location_id) return false;
+                        const itemSegmentId = item.location_id.split('-').slice(0, 4).join('-');
+                        return itemSegmentId === segmentId;
+                    });
+                    const container = document.getElementById('details-container');
+                    const tableBody = document.querySelector("#details-table tbody");
+                    document.getElementById('details-title').textContent = `Inventory Details: ${segmentId}`;
+                    tableBody.innerHTML = "";
+                    if (details.length > 0) {
+                        details.forEach(item => {
+                            const row = tableBody.insertRow();
+                            if (item.hasMismatch) {
+                                row.classList.add('highlight-error');
+                            }
+                            row.innerHTML = `<td>${item.sku_id || 'N/A'}</td><td>${item.on_hand_quantity || 'N/A'}</td><td>${item.location_id || 'N/A'}</td><td>${item.bizline || 'N/A'}</td>`;
+                        });
+                        container.style.display = "block";
+                        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } else {
+                        container.style.display = "none";
+                    }
+                });
+        }
+        
+        // --- INITIALIZATION ---
+        document.getElementById('refresh-btn').addEventListener('click', drawLayout);
+        
+        drawLayout(); // Initial draw
     </script>
 </body>
 </html>
+
