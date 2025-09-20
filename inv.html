@@ -100,7 +100,7 @@
         .shelf-p { fill: #fff9db; }
         .shelf-a { fill: #cfe2ff; }
         .shelf-c { fill: #d1e7dd; }
-        .segment-divider { stroke: #ffffff; stroke-width: 1px; }
+        .segment-divider { stroke: #e9ecef; stroke-width: 1px; }
 
         .pathway-label {
             font-weight: 600;
@@ -264,6 +264,7 @@
             let shelves = [];
             let pathwayLabels = [];
             let zoneBoundaries = [];
+            let segmentDividers = [];
 
             const PADDING = 40;
             const SPACING = 80;
@@ -293,19 +294,28 @@
             const V_SHELF_AREA_HEIGHT = (V_SHELF_BLOCK_HEIGHT * 2) + V_AISLE_GAP_HEIGHT;
             
             // --- CALCULATE DIMENSIONS ---
+            // NEW PALLET CONFIGURATION (drawn from top to bottom)
             const palletConfig = [
-                { name: 'PC-05', type: 'single' }, { name: ['PC-04', 'PC-03'], type: 'double' }, { name: ['PC-02', 'PC-01'], type: 'double' },
-                null, 
-                { name: ['LC-05', 'LC-04'], type: 'double' }, { name: ['LC-03', 'LC-02'], type: 'double' }, { name: 'LC-01', type: 'single' }
+                { name: 'LC-10', type: 'single' },
+                null,
+                { name: ['LC-09', 'LC-08'], type: 'double' },
+                null,
+                { name: ['LC-07', 'LC-06'], type: 'double' },
+                null,
+                { name: ['LC-05', 'LC-04'], type: 'double' },
+                null,
+                { name: ['LC-03', 'PC-02'], type: 'double' },
+                null,
+                { name: 'PC-01', type: 'single' }
             ];
 
             let palletLayoutHeight = 0;
             palletConfig.forEach(config => {
-                if (config === null) palletLayoutHeight += H_AISLE_WIDTH * 2;
+                if (config === null) palletLayoutHeight += H_AISLE_WIDTH; // Aisle is just width, not double
                 else if (config.type === 'single') palletLayoutHeight += H_SHELF_DEPTH + H_AISLE_WIDTH;
                 else palletLayoutHeight += (H_SHELF_DEPTH * 2) + H_AISLE_WIDTH;
             });
-            palletLayoutHeight -= H_AISLE_WIDTH;
+            palletLayoutHeight -= H_AISLE_WIDTH; // No aisle after the last element
             const palletLayoutWidth = H_SHELF_AREA_LENGTH + H_LABEL_AREA_WIDTH;
             const shelvingLayoutWidth = (V_NUM_SINGLE_SHELVES * V_SHELF_DEPTH) + (V_NUM_AISLES * V_AISLE_WIDTH);
             const shelvingLayoutHeight = V_SHELF_AREA_HEIGHT + V_LABEL_AREA_HEIGHT;
@@ -320,7 +330,7 @@
             const h_startX = (MAP_WIDTH - palletLayoutWidth) / 2 + H_LABEL_AREA_WIDTH;
             
             palletConfig.forEach(config => {
-                if (config === null) { h_currentY += H_AISLE_WIDTH * 2; return; }
+                if (config === null) { h_currentY += H_AISLE_WIDTH; return; }
                 if (config.type === 'single') {
                     shelves.push({ x: h_startX, y: h_currentY, width: H_SHELF_AREA_LENGTH, height: H_SHELF_DEPTH, type: 'c', pathway: config.name });
                     pathwayLabels.push({ name: config.name.slice(-2), x: h_startX - 15, y: h_currentY + H_SHELF_DEPTH / 2, type: 'horizontal' });
@@ -340,8 +350,9 @@
             const v_startY = PADDING + palletLayoutHeight + SPACING;
             const v_startX = (MAP_WIDTH - shelvingLayoutWidth) / 2;
             let v_currentX = v_startX;
-            const verticalPathwayMap = ['LA-01', 'LA-02', 'LB-01', 'LB-02', 'LB-03', 'LB-04', 'LB-05', 'LB-06', 'PA-01', 'PA-02', 'PA-03', 'PA-04', 'PB-01', 'PB-02', 'PB-03', 'PB-04'];
-            const verticalShelfNumberMap = ['01','02', '01','02','03','04','05','06', '01','02','03','04', '01','02','03','04'];
+            // NEW SHELVING CONFIGURATION (from left to right: LA 01-08, LB 09-12, PA 13, PB 14-16)
+            const verticalPathwayMap = ['LA-01', 'LA-02', 'LA-03', 'LA-04', 'LA-05', 'LA-06', 'LA-07', 'LA-08', 'LB-09', 'LB-10', 'LB-11', 'LB-12', 'PA-13', 'PB-14', 'PB-15', 'PB-16'];
+            const verticalShelfNumberMap = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16'];
 
             for (let i = 0; i < V_NUM_DOUBLE_SHELVES; i++) {
                 const pathway1 = verticalPathwayMap[i*2], pathway2 = verticalPathwayMap[i*2 + 1];
@@ -367,7 +378,19 @@
                 const yMin = d3.min(zoneShelves, d => d.y), yMax = d3.max(zoneShelves, d => d.y + d.height);
                 const isHorizontal = zone.name.includes('C');
                 if (isHorizontal) {
-                    pathwayLabels.push({ name: zone.name, x: xMin + (xMax - xMin) / 2, y: yMin - 15, type: 'zone' });
+                    if (zone.name === 'PC') {
+                        const pc01_shelf = shelves.find(s => s.pathway === 'PC-01');
+                        const pc02_shelf = shelves.find(s => s.pathway === 'PC-02');
+                        if (pc01_shelf && pc02_shelf) {
+                            // Place label in the middle of the aisle between PC-01 and PC-02
+                            const aisleCenterY = pc02_shelf.y + pc02_shelf.height + H_AISLE_WIDTH / 2;
+                            pathwayLabels.push({ name: zone.name, x: xMin + (xMax - xMin) / 2, y: aisleCenterY, type: 'zone' });
+                        } else {
+                             pathwayLabels.push({ name: zone.name, x: xMin + (xMax - xMin) / 2, y: yMin - 15, type: 'zone' });
+                        }
+                    } else { // For LC zone
+                        pathwayLabels.push({ name: zone.name, x: xMin + (xMax - xMin) / 2, y: yMin - 15, type: 'zone' });
+                    }
                     zoneBoundaries.push({ x: xMin - 5, y: yMin - 5, width: xMax - xMin + 10, height: yMax - yMin + 10, rx: 8 });
                 } else {
                     pathwayLabels.push({ name: zone.name, x: xMin + (xMax - xMin) / 2, y: yMin - 35, type: 'zone' });
@@ -382,19 +405,32 @@
                         const segmentNumber = j + 1;
                         const location = `VNVL-${shelf.pathway}-${String(segmentNumber).padStart(2, '0')}`;
                         interactiveSegments.push({ x: shelf.x + j * H_SEGMENT_WIDTH, y: shelf.y, width: H_SEGMENT_WIDTH, height: shelf.height, location: location });
+                        if (j < H_NUM_SEGMENTS - 1) {
+                            segmentDividers.push({
+                                x1: shelf.x + (j + 1) * H_SEGMENT_WIDTH, y1: shelf.y,
+                                x2: shelf.x + (j + 1) * H_SEGMENT_WIDTH, y2: shelf.y + shelf.height
+                            });
+                        }
                     }
                 } else {
                     for (let j = 0; j < V_NUM_SEGMENTS_PER_BLOCK; j++) {
                         let segmentNumber = (shelf.block === 1) ? (j + 1) : (j + 1 + V_NUM_SEGMENTS_PER_BLOCK);
                         const location = `VNVL-${shelf.pathway}-${String(segmentNumber).padStart(2, '0')}`;
                         interactiveSegments.push({ x: shelf.x, y: shelf.y + j * V_SEGMENT_HEIGHT, width: shelf.width, height: V_SEGMENT_HEIGHT, location: location });
+                        if (j < V_NUM_SEGMENTS_PER_BLOCK - 1) {
+                            segmentDividers.push({
+                                x1: shelf.x, y1: shelf.y + (j + 1) * V_SEGMENT_HEIGHT,
+                                x2: shelf.x + shelf.width, y2: shelf.y + (j + 1) * V_SEGMENT_HEIGHT
+                            });
+                        }
                     }
                 }
             });
 
             // --- 4. RENDER SVG ELEMENTS ---
-            svg.selectAll(".zone-boundary").data(zoneBoundaries).enter().append("rect").attr("class", "zone-boundary").attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height).attr("rx", d => d.rx);
             svg.selectAll(".shelf").data(shelves).enter().append("rect").attr("class", d => `shelf shelf-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height);
+            svg.selectAll(".segment-divider").data(segmentDividers).enter().append("line").attr("class", "segment-divider").attr("x1", d => d.x1).attr("y1", d => d.y1).attr("x2", d => d.x2).attr("y2", d => d.y2);
+            svg.selectAll(".zone-boundary").data(zoneBoundaries).enter().append("rect").attr("class", "zone-boundary").attr("x", d => d.x).attr("y", d => d.y).attr("width", d => d.width).attr("height", d => d.height).attr("rx", d => d.rx);
             svg.selectAll(".pathway-label").data(pathwayLabels).enter().append("text").attr("class", d => `pathway-label pathway-label-${d.type}`).attr("x", d => d.x).attr("y", d => d.y).text(d => d.name);
             svg.selectAll(".interactive-segment").data(interactiveSegments).enter().append("rect")
                 .attr("class", "interactive-segment")
